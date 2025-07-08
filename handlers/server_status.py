@@ -37,7 +37,7 @@ async def show_server_status(message: types.Message):
         #text += f"{status}  <b>{name}</b> {active} ⏱ {response}  {updated}\n"
         text += f" {active} <b>{name}</b> {status}  ⏱ {response}  {updated}\n"
 
-        button_text = f"{'🔕 Отключить' if row['is_active'] else '🔔 Включить'} {name}"
+        button_text = f"{'🔕 Отключить оповещения' if row['is_active'] else '🔔 Включить оповещения'} {name}"
         callback_data = f"toggle:{row['server_id']}:{int(not row['is_active'])}"
 
         keyboard.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
