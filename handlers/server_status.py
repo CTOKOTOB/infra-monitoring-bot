@@ -11,17 +11,20 @@ async def show_server_status(message: types.Message):
     pool = get_db_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT s.server_id, s.name, s.is_active,
-                   ac.is_available, ac.response_time, ac.created_at
-            FROM servers s
-            LEFT JOIN LATERAL (
-                SELECT is_available, response_time, created_at
-                FROM availability_checks ac
-                WHERE ac.server_id = s.server_id
-                ORDER BY created_at DESC
-                LIMIT 1
-            ) ac ON true
-            ORDER BY s.server_id
+
+SELECT s.server_id, s.name, s.is_active,
+       ac.is_available, ac.response_time, ac.created_at
+FROM servers s 
+LEFT JOIN LATERAL (
+    SELECT is_available, response_time, created_at
+    FROM availability_checks ac
+    WHERE ac.server_id = s.server_id 
+    ORDER BY created_at DESC
+    LIMIT 1
+) ac ON true
+WHERE s.name != 'raspberry_pi'
+ORDER BY s.server_id
+
         """)
 
     text = "📡 <b>Состояние серверов:</b>\n\n"
