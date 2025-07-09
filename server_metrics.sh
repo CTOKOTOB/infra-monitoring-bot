@@ -56,7 +56,7 @@ cat > "$PLAYBOOK_FILE" <<EOF
 
     - name: Collect CPU, RAM, and Disk usage
       shell: |
-        CPU=\$(top -bn1 | grep 'Cpu(s)' | awk '{print 100 - \$8}')
+        CPU=\$(top -bn1 | grep 'Cpu(s)' | awk -F',' '{for (i=1;i<=NF;i++) if (\$i ~ /id/) print \$i}' | awk '{print 100 - \$1}')
         RAM_TOTAL=\$(free -m | awk '/Mem:/ {print \$2}')
         RAM_USED=\$(free -m | awk '/Mem:/ {print \$3}')
         DISK_TOTAL=\$(df -m / | awk 'END {print \$2}')
@@ -190,4 +190,5 @@ VALUES ($local_server_id, '/', $disk_total_gb, $disk_used_gb, $disk_used_percent
 
 echo "[INFO] Метрики для raspberry_pi ($local_server_id) загружены."
 
+rm -rf $TMP_DIR
 
