@@ -548,3 +548,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES 
 -- PostgreSQL database dump complete
 --
 
+
+ALTER TABLE servers
+ADD COLUMN connect_user VARCHAR(50),
+ADD COLUMN connect_password VARCHAR(100);
+
+ALTER TABLE servers
+RENAME COLUMN connect_password TO connect_password_enc;
+
