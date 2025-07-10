@@ -1,6 +1,6 @@
 # infra-monitoring-bot
-Telegram bot for infrastructure monitoring (Raspberry Pi, servers, etc.)
 
+The idea is to collect network latency metrics from my VPS instances and OpenWRT-configured routers on a local Raspberry Pi and store them in a PostgreSQL database. If any of the devices become unreachable, a Telegram notification should be sent.
 
 crontab
 
