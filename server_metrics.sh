@@ -6,6 +6,20 @@ set -a
 source ~/infra-monitoring-bot/.env
 set +a
 
+pidfile="/tmp/$(basename -- "${BASH_SOURCE[0]}").pid"
+
+if [[ -f "$pidfile" ]]; then
+    pid=$(cat "$pidfile")
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [[ -e "/proc/$pid" ]]; then
+        echo "$(date +"%Y-%m-%d %H:%M:%S") [WARNING] $(hostname -s) - $(basename "$0") already running (PID $pid)"
+        exit 1
+    fi
+fi
+
+echo "$$" > "$pidfile"
+trap 'rm -f "$pidfile"' EXIT
+
+
 echo "[INFO] Запуск метрик-сборщика: $(date)"
 
 TMP_DIR="/tmp/infra_monitoring"
@@ -153,8 +167,27 @@ load_1m=$(cut -d ' ' -f1 /proc/loadavg)
 load_5m=$(cut -d ' ' -f2 /proc/loadavg)
 load_15m=$(cut -d ' ' -f3 /proc/loadavg)
 
-cpu_idle=$(top -bn1 | grep 'Cpu(s)' | awk '{print $8}' | tr -d ',')
-cpu_percent=$(echo "100 - $cpu_idle" | bc)
+#cpu_idle=$(top -bn1 | grep 'Cpu(s)' | awk '{print $8}' | tr -d ',')
+#cpu_percent=$(echo "100 - $cpu_idle" | bc)
+
+read cpu user nice system idle iowait irq softirq steal guest < /proc/stat
+prev_idle=$((idle + iowait))
+prev_non_idle=$((user + nice + system + irq + softirq + steal))
+prev_total=$((prev_idle + prev_non_idle))
+
+# Подождем 1 секунду и снова снимем метрику
+sleep 1
+
+read cpu user nice system idle iowait irq softirq steal guest < /proc/stat
+idle=$((idle + iowait))
+non_idle=$((user + nice + system + irq + softirq + steal))
+total=$((idle + non_idle))
+
+# Вычисляем разницу
+totald=$((total - prev_total))
+idled=$((idle - prev_idle))
+
+cpu_percent=$(echo "scale=1; (100 * ($totald - $idled)) / $totald" | bc)
 
 ram_total_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 ram_available_kb=$(grep MemAvailable /proc/meminfo | awk '{print $2}')

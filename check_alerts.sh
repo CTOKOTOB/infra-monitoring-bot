@@ -6,6 +6,21 @@ set -a
 source ~/infra-monitoring-bot/.env
 set +a
 
+
+pidfile="/tmp/$(basename -- "${BASH_SOURCE[0]}").pid"
+
+if [[ -f "$pidfile" ]]; then
+    pid=$(cat "$pidfile")
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [[ -e "/proc/$pid" ]]; then
+        echo "$(date +"%Y-%m-%d %H:%M:%S") [WARNING] $(hostname -s) - $(basename "$0") already running (PID $pid)"
+        exit 1
+    fi
+fi
+
+echo "$$" > "$pidfile"
+trap 'rm -f "$pidfile"' EXIT
+
+
 SQL_QUERY="
 WITH latest_checks AS (
   SELECT DISTINCT ON (server_id)
