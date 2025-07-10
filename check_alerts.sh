@@ -2,11 +2,9 @@
 
 sleep 40
 
-
 set -a
 source ~/infra-monitoring-bot/.env
 set +a
-
 
 SQL_QUERY="
 WITH latest_checks AS (
@@ -18,10 +16,13 @@ WITH latest_checks AS (
 SELECT s.server_id, s.name, lc.created_at
 FROM servers s
 JOIN latest_checks lc ON lc.server_id = s.server_id
-LEFT JOIN alerts a 
-  ON a.server_id = s.server_id 
+LEFT JOIN alerts a
+  ON a.server_id = s.server_id
   AND a.created_at > now() - interval '15 minutes'
-WHERE s.is_active = true AND lc.is_available = false AND a.alert_id IS NULL;
+WHERE s.is_active = true
+  AND s.ip_address != '127.0.0.1'
+  AND lc.is_available = false
+  AND a.alert_id IS NULL;
 "
 
 # Выполняем запрос
@@ -52,5 +53,4 @@ while IFS=',' read -r SERVER_ID NAME TIMESTAMP; do
          --data-urlencode "text=$MESSAGE" \
          -d parse_mode="HTML"
 done <<< "$ALERTS"
-
 
