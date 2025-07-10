@@ -6,7 +6,7 @@ import asyncio
 import os
 from aiogram import Bot, Dispatcher
 
-from handlers import temp, server_status
+from handlers import temp, server_status, serv_detail
 from db.database import init_db
 
 bot = Bot(token=os.environ["MONITORING_BOT_TOKEN"])
@@ -17,6 +17,7 @@ async def main():
 
     dp.include_router(temp.router)
     dp.include_router(server_status.router)
+    dp.include_router(serv_detail.router)
 
     await dp.start_polling(bot)
 

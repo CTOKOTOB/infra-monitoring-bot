@@ -556,3 +556,12 @@ ADD COLUMN connect_password VARCHAR(100);
 ALTER TABLE servers
 RENAME COLUMN connect_password TO connect_password_enc;
 
+CREATE TABLE user_settings (
+    user_id BIGINT PRIMARY KEY,
+    hours_depth INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE allowed_users (
+    user_id BIGINT PRIMARY KEY,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
