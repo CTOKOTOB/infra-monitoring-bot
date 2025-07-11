@@ -47,9 +47,10 @@ async def select_server(callback: types.CallbackQuery, state: FSMContext):
         ],
         [
             types.InlineKeyboardButton(text="Disk", callback_data="metric_disk"),
-            types.InlineKeyboardButton(text="Все", callback_data="metric_all"),
+            types.InlineKeyboardButton(text="Latency", callback_data="metric_latency"),
         ],
         [
+            types.InlineKeyboardButton(text="Все", callback_data="metric_all"),
             types.InlineKeyboardButton(text="📆 Изменить период", callback_data="change_period"),
         ],
     ]
@@ -105,6 +106,24 @@ async def show_metric(callback: types.CallbackQuery, state: FSMContext):
 
         images = []
 
+        # Получаем имя сервера
+        server_name = await conn.fetchval(
+            "SELECT name FROM servers WHERE server_id = $1", server_id
+        )
+
+        if metric in ("latency", "all"):
+            rows = await conn.fetch(
+                """
+                SELECT created_at, response_time FROM availability_checks
+                WHERE server_id = $1 AND created_at >= $2
+                ORDER BY created_at
+                """, server_id, since_time
+            )
+            if rows:
+                title = f"Latency (ms) — {server_name}"
+                buf = plot_metric([(row["created_at"], row["response_time"] * 1000) for row in rows], title, y_limits=(0, 100) )
+                images.append(buf)
+
         if metric in ("cpu", "all"):
             rows = await conn.fetch(
                 """
@@ -114,7 +133,8 @@ async def show_metric(callback: types.CallbackQuery, state: FSMContext):
                 """, server_id, since_time
             )
             if rows:
-                buf = plot_metric([(row["created_at"], row["cpu_percent"]) for row in rows], "CPU Usage (%)")
+                title = f"CPU Usage (%) — {server_name}"
+                buf = plot_metric([(row["created_at"], row["cpu_percent"]) for row in rows], title)
                 images.append(buf)
 
         if metric in ("ram", "all"):
@@ -126,20 +146,23 @@ async def show_metric(callback: types.CallbackQuery, state: FSMContext):
                 """, server_id, since_time
             )
             if rows:
-                buf = plot_metric([(row["created_at"], row["used_percent"]) for row in rows], "RAM Usage (%)")
+                title = f"RAM Usage (%) — {server_name}"
+                buf = plot_metric([(row["created_at"], row["used_percent"]) for row in rows], title)
                 images.append(buf)
 
         if metric in ("disk", "all"):
             rows = await conn.fetch(
                 """
                 SELECT created_at, used_percent FROM disk_usage
-                WHERE server_id = $1 AND created_at >= $2 AND mount_point = '/'
+                WHERE server_id = $1 AND created_at >= $2
                 ORDER BY created_at
                 """, server_id, since_time
             )
             if rows:
-                buf = plot_metric([(row["created_at"], row["used_percent"]) for row in rows], "Disk Usage (%)")
+                title = f"Disk Usage (%) — {server_name}"
+                buf = plot_metric([(row["created_at"], row["used_percent"]) for row in rows], title)
                 images.append(buf)
+
 
     if not images:
         await callback.message.answer("Нет данных за выбранный период.")
@@ -150,20 +173,27 @@ async def show_metric(callback: types.CallbackQuery, state: FSMContext):
         ]
         await callback.message.answer_media_group(media)
 
-def plot_metric(points, title):
-    times = [p[0] for p in points]
-    values = [p[1] for p in points]
+def plot_metric(data, title, y_limits=None):
+    import matplotlib.pyplot as plt
+    import io
 
-    plt.figure(figsize=(6, 3))
-    plt.plot(times, values, marker='o')
-    plt.title(title)
-    plt.xlabel("Время")
-    plt.ylabel("Значение")
-    plt.grid(True)
-    plt.tight_layout()
+    x = [point[0] for point in data]
+    y = [point[1] for point in data]
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y, marker="o")
+    ax.set_title(title)
+    ax.set_xlabel("Time")
+    ax.set_ylabel(title.split()[0])
+    if y_limits is not None:
+        ax.set_ylim(y_limits)
+    ax.grid(True)
 
     buf = io.BytesIO()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
     plt.savefig(buf, format='png')
+    plt.close(fig)
     buf.seek(0)
-    plt.close()
     return buf
+
