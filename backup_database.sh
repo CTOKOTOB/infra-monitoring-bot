@@ -7,7 +7,7 @@ source ~/infra-monitoring-bot/.env_db
 set +a
 
 v_date=$(date +%Y%m%d%H%M%S)
-d_backup="/calobot_backups"
+d_backup="/backups"
 #mkdir -p "$d_backup"
 
 message="📦 <b>PostgreSQL Backup Report</b>%0A"
@@ -17,7 +17,6 @@ for entry in $(compgen -A variable DB_ENTRY_); do
     IFS='|' read -r name host port dbname user <<< "${!entry}"
     file="${d_backup}/${dbname}_${v_date}.sql.gz"
 
-    # Резервное копирование
     if pg_dump -h "$host" -p "$port" -U "$user" "$dbname" | gzip > "$file"; then
         message+="✅ <b>${name}</b>: backup created: <code>$(basename "$file")</code>%0A"
     else
@@ -25,6 +24,15 @@ for entry in $(compgen -A variable DB_ENTRY_); do
         rm -f "$file"
         continue
     fi
+
+        global_file="${d_backup}/global_objects_${name}_${v_date}.sql"
+        if pg_dumpall -h "$host" -p "$port" -U "$user" -g > "$global_file"; then
+            message+="🔐 Global objects backup created: <code>$(basename "$global_file")</code>%0A"
+        else
+            message+="❌ Global objects backup FAILED\n"
+            rm -f "$global_file"
+        fi
+
 done
 
 # Удаление старых бэкапов
