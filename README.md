@@ -7,6 +7,8 @@ crontab -l
 * * * * * /usr/bin/bash /home/dim/infra-monitoring-bot/check_servers.sh 2>&1
 * * * * * /usr/bin/bash /home/dim/infra-monitoring-bot/check_alerts.sh 2>&1
 * * * * * /usr/bin/bash /home/dim/infra-monitoring-bot/server_metrics.sh 2>&1
+7 5 * * * /usr/bin/bash /home/dim/infra-monitoring-bot/backup_database.sh 2>&1
+
 
 cat .bash_aliases
 alias psql='sudo -u postgres psql -d monitoring_db'
