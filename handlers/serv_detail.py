@@ -31,6 +31,7 @@ async def cmd_serv_detail(message: types.Message, state: FSMContext):
         [types.InlineKeyboardButton(text=server["name"], callback_data=f"serv_{server['server_id']}")]
         for server in servers
     ]
+    keyboard.append([types.InlineKeyboardButton(text="📆 Изменить период", callback_data="change_period")])
     await message.answer("Выберите сервер:", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard))
     await state.set_state(ServDetailStates.choosing_server)
 
@@ -51,7 +52,6 @@ async def select_server(callback: types.CallbackQuery, state: FSMContext):
         ],
         [
             types.InlineKeyboardButton(text="Все", callback_data="metric_all"),
-            types.InlineKeyboardButton(text="📆 Изменить период", callback_data="change_period"),
         ],
     ]
     await callback.message.edit_text("Выберите метрику:", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard))
@@ -74,7 +74,7 @@ async def change_period(callback: types.CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("period_"))
-async def save_period(callback: types.CallbackQuery):
+async def save_period(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     hours = int(callback.data.replace("period_", ""))
     pool = get_db_pool()
@@ -84,8 +84,9 @@ async def save_period(callback: types.CallbackQuery):
             VALUES ($1, $2)
             ON CONFLICT (user_id) DO UPDATE SET hours_depth = $2
         """, user_id, hours)
-    await callback.answer(f"Период установлен: {hours} ч ⏱️", show_alert=True)
-
+    #await callback.message.delete()
+    await callback.message.edit_text(f"Период обновлён ✅ Новое значение: {hours} ч ⏱️")
+    await cmd_serv_detail(callback.message, state)
 
 @router.callback_query(F.data.startswith("metric_"))
 @router.callback_query(F.data.startswith("metric_"))
