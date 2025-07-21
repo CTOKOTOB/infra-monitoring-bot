@@ -17,6 +17,74 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+--
+-- Name: get_server_availability(interval); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_server_availability(time_interval interval) RETURNS TABLE(server_id integer, name character varying, total_checks bigint, successful_checks bigint, availability_percent numeric)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.server_id,
+        s.name,
+        COUNT(ac.check_id) AS total_checks,
+        COUNT(*) FILTER (WHERE ac.response_time <= 0.1) AS successful_checks,
+        ROUND(
+            100.0 * COUNT(*) FILTER (WHERE ac.response_time <= 0.1) / NULLIF(COUNT(ac.check_id), 0),
+            2
+        ) AS availability_percent
+    FROM
+        servers s
+    JOIN
+        availability_checks ac
+        ON ac.server_id = s.server_id AND ac.created_at >= NOW() - time_interval
+    WHERE
+        s.ssh_port != 22
+    GROUP BY
+        s.server_id, s.name
+    ORDER BY
+        availability_percent DESC NULLS LAST;
+END;
+$$;
+
+
+ALTER FUNCTION public.get_server_availability(time_interval interval) OWNER TO postgres;
+
+--
+-- Name: get_server_availability(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_server_availability(interval_text text) RETURNS TABLE(server_id integer, name character varying, total_checks integer, successful_checks integer, availability_percent numeric)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.server_id,
+        s.name,
+        COUNT(ac.check_id) AS total_checks,
+        COUNT(*) FILTER (WHERE ac.response_time <= 0.1) AS successful_checks,
+        ROUND(
+            100.0 * COUNT(*) FILTER (WHERE ac.response_time <= 0.1) / NULLIF(COUNT(ac.check_id), 0),
+            2
+        ) AS availability_percent
+    FROM
+        servers s
+    LEFT JOIN
+        availability_checks ac
+        ON ac.server_id = s.server_id AND ac.created_at >= NOW() - CAST(interval_text AS INTERVAL)
+    GROUP BY
+        s.server_id, s.name
+    ORDER BY
+        availability_percent DESC NULLS LAST;
+END;
+$$;
+
+
+ALTER FUNCTION public.get_server_availability(interval_text text) OWNER TO postgres;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -59,6 +127,18 @@ ALTER SEQUENCE public.alerts_alert_id_seq OWNER TO postgres;
 
 ALTER SEQUENCE public.alerts_alert_id_seq OWNED BY public.alerts.alert_id;
 
+
+--
+-- Name: allowed_users; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.allowed_users (
+    user_id bigint NOT NULL,
+    added_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.allowed_users OWNER TO postgres;
 
 --
 -- Name: availability_checks; Type: TABLE; Schema: public; Owner: postgres
@@ -224,11 +304,31 @@ CREATE TABLE public.servers (
     ip_address character varying(15) NOT NULL,
     description text,
     is_active boolean DEFAULT true,
-    ssh_port integer DEFAULT 22
+    ssh_port integer DEFAULT 22,
+    connect_user character varying(50),
+    connect_password_enc character varying(100)
 );
 
 
 ALTER TABLE public.servers OWNER TO postgres;
+
+--
+-- Name: server_availability_view; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.server_availability_view AS
+ SELECT s.server_id,
+    s.name,
+    count(ac.check_id) AS total_checks,
+    count(*) FILTER (WHERE (ac.response_time <= (0.1)::double precision)) AS successful_checks,
+    round(((100.0 * (count(*) FILTER (WHERE (ac.response_time <= (0.1)::double precision)))::numeric) / (NULLIF(count(ac.check_id), 0))::numeric), 2) AS availability_percent
+   FROM (public.servers s
+     LEFT JOIN public.availability_checks ac ON (((ac.server_id = s.server_id) AND (ac.created_at >= (now() - '1 day'::interval)))))
+  GROUP BY s.server_id, s.name
+  ORDER BY (round(((100.0 * (count(*) FILTER (WHERE (ac.response_time <= (0.1)::double precision)))::numeric) / (NULLIF(count(ac.check_id), 0))::numeric), 2)) DESC NULLS LAST;
+
+
+ALTER VIEW public.server_availability_view OWNER TO postgres;
 
 --
 -- Name: servers_server_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -288,6 +388,18 @@ ALTER SEQUENCE public.temperature_logs_log_id_seq OWNED BY public.temperature_lo
 
 
 --
+-- Name: user_settings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_settings (
+    user_id bigint NOT NULL,
+    hours_depth integer DEFAULT 1 NOT NULL
+);
+
+
+ALTER TABLE public.user_settings OWNER TO postgres;
+
+--
 -- Name: alerts alert_id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -345,6 +457,14 @@ ALTER TABLE ONLY public.alerts
 
 
 --
+-- Name: allowed_users allowed_users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.allowed_users
+    ADD CONSTRAINT allowed_users_pkey PRIMARY KEY (user_id);
+
+
+--
 -- Name: availability_checks availability_checks_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -393,11 +513,19 @@ ALTER TABLE ONLY public.temperature_logs
 
 
 --
+-- Name: user_settings user_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_settings
+    ADD CONSTRAINT user_settings_pkey PRIMARY KEY (user_id);
+
+
+--
 -- Name: alerts alerts_server_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.alerts
-    ADD CONSTRAINT alerts_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id);
+    ADD CONSTRAINT alerts_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id) ON DELETE CASCADE;
 
 
 --
@@ -405,7 +533,7 @@ ALTER TABLE ONLY public.alerts
 --
 
 ALTER TABLE ONLY public.availability_checks
-    ADD CONSTRAINT availability_checks_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id);
+    ADD CONSTRAINT availability_checks_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id) ON DELETE CASCADE;
 
 
 --
@@ -413,7 +541,7 @@ ALTER TABLE ONLY public.availability_checks
 --
 
 ALTER TABLE ONLY public.cpu_usage
-    ADD CONSTRAINT cpu_usage_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id);
+    ADD CONSTRAINT cpu_usage_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id) ON DELETE CASCADE;
 
 
 --
@@ -421,7 +549,7 @@ ALTER TABLE ONLY public.cpu_usage
 --
 
 ALTER TABLE ONLY public.disk_usage
-    ADD CONSTRAINT disk_usage_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id);
+    ADD CONSTRAINT disk_usage_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id) ON DELETE CASCADE;
 
 
 --
@@ -429,7 +557,7 @@ ALTER TABLE ONLY public.disk_usage
 --
 
 ALTER TABLE ONLY public.ram_usage
-    ADD CONSTRAINT ram_usage_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id);
+    ADD CONSTRAINT ram_usage_server_id_fkey FOREIGN KEY (server_id) REFERENCES public.servers(server_id) ON DELETE CASCADE;
 
 
 --
@@ -444,6 +572,13 @@ GRANT ALL ON TABLE public.alerts TO monuser;
 --
 
 GRANT ALL ON SEQUENCE public.alerts_alert_id_seq TO monuser;
+
+
+--
+-- Name: TABLE allowed_users; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.allowed_users TO monuser;
 
 
 --
@@ -510,6 +645,13 @@ GRANT ALL ON TABLE public.servers TO monuser;
 
 
 --
+-- Name: TABLE server_availability_view; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.server_availability_view TO monuser;
+
+
+--
 -- Name: SEQUENCE servers_server_id_seq; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -531,6 +673,13 @@ GRANT ALL ON SEQUENCE public.temperature_logs_log_id_seq TO monuser;
 
 
 --
+-- Name: TABLE user_settings; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.user_settings TO monuser;
+
+
+--
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: postgres
 --
 
@@ -548,20 +697,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES 
 -- PostgreSQL database dump complete
 --
 
-
-ALTER TABLE servers
-ADD COLUMN connect_user VARCHAR(50),
-ADD COLUMN connect_password VARCHAR(100);
-
-ALTER TABLE servers
-RENAME COLUMN connect_password TO connect_password_enc;
-
-CREATE TABLE user_settings (
-    user_id BIGINT PRIMARY KEY,
-    hours_depth INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE allowed_users (
-    user_id BIGINT PRIMARY KEY,
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
