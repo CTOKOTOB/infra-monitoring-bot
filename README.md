@@ -24,3 +24,4 @@ temp - cpu pi
 graph - график cpu pi
 status - отклик по серверам
 serv_detail - метрики по конкретному серверу
+percent_avail - процент доступности vps

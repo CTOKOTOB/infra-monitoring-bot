@@ -5,7 +5,7 @@ import asyncio
 import os
 from aiogram import Bot, Dispatcher
 
-from handlers import temp, server_status, serv_detail
+from handlers import temp, server_status, serv_detail, percent_avail
 from db.database import init_db
 
 from middlewares.owner_only import OwnerOnlyMiddleware
@@ -23,6 +23,7 @@ async def main():
     dp.include_router(temp.router)
     dp.include_router(server_status.router)
     dp.include_router(serv_detail.router)
+    dp.include_router(percent_avail.router)
 
     await dp.start_polling(bot)
 
