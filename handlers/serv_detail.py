@@ -168,6 +168,7 @@ async def show_metric(callback: types.CallbackQuery, state: FSMContext):
     if not images:
         await callback.message.answer("Нет данных за выбранный период.")
     else:
+        await callback.message.edit_reply_markup(reply_markup=None)
         media = [
             types.InputMediaPhoto(media=BufferedInputFile(img.getvalue(), filename="plot.png"))
             for img in images
