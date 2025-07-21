@@ -20,7 +20,8 @@ trap 'rm -f "$pidfile"' EXIT
 
 
 # Получаем список активных серверов
-SERVERS=$(psql "$DATABASE_MONITORING_URL" -Atc "SELECT server_id, ip_address, ssh_port FROM servers WHERE is_active = true;")
+#SERVERS=$(psql "$DATABASE_MONITORING_URL" -Atc "SELECT server_id, ip_address, ssh_port FROM servers WHERE is_active = true;")
+SERVERS=$(psql "$DATABASE_MONITORING_URL" -Atc "SELECT server_id, ip_address, ssh_port FROM servers WHERE is_active = true and name != 'raspberry_pi';")
 
 # Обрабатываем каждый сервер
 echo "$SERVERS" | while IFS='|' read -r SERVER_ID IP PORT; do
