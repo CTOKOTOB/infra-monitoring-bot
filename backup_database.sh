@@ -8,7 +8,10 @@ set +a
 
 v_date=$(date +%Y%m%d%H%M%S)
 d_backup="/backups"
-#mkdir -p "$d_backup"
+d_backup_ext="/usby/backups"
+
+mkdir -p "$d_backup"
+mkdir -p "$d_backup_ext"
 
 message="📦 <b>PostgreSQL Backup Report</b>%0A"
 
@@ -19,6 +22,7 @@ for entry in $(compgen -A variable DB_ENTRY_); do
 
     if pg_dump -h "$host" -p "$port" -U "$user" "$dbname" | gzip > "$file"; then
         message+="✅ <b>${name}</b>: backup created: <code>$(basename "$file")</code>%0A"
+	cp "$file" "$d_backup_ext/"
     else
         message+="❌ <b>${name}</b>: backup FAILED%0A"
         rm -f "$file"
@@ -28,6 +32,7 @@ for entry in $(compgen -A variable DB_ENTRY_); do
         global_file="${d_backup}/global_objects_${name}_${v_date}.sql"
         if pg_dumpall -h "$host" -p "$port" -U "$user" -g > "$global_file"; then
             message+="🔐 Global objects backup created: <code>$(basename "$global_file")</code>%0A"
+		cp "$global_file" "$d_backup_ext/"
         else
             message+="❌ Global objects backup FAILED\n"
             rm -f "$global_file"
