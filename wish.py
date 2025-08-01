@@ -89,7 +89,7 @@ async def query_yandex_gpt(prompt: str) -> str:
     }
     data = {
         "modelUri": f"gpt://{FOLDER_ID}/yandexgpt/latest",
-        "completionOptions": {"stream": False, "temperature": 0.92, "maxTokens": 80},
+        "completionOptions": {"stream": False, "temperature": 0.97, "maxTokens": 120},
         "messages": [
             {
                 "role": "system",
@@ -121,13 +121,31 @@ async def save_wish_to_db(city, temp, description, daytime_phrase, wish):
     await conn.close()
 
 
-async def send_to_telegram(text: str):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+async def get_random_image_path():
+    conn = await asyncpg.connect(DATABASE_URL)
+    row = await conn.fetchrow("SELECT file_path FROM love_is_images ORDER BY random() LIMIT 1")
+    await conn.close()
+    if row:
+        return row["file_path"]
+    return None
+
+
+async def send_photo_and_caption_to_telegram(photo_path: str, caption: str):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload) as resp:
-            if resp.status != 200:
-                print("Ошибка отправки в Telegram:", await resp.text())
+        if not os.path.exists(photo_path):
+            print("Файл картинки не найден:", photo_path)
+            return
+        with open(photo_path, "rb") as photo_file:
+            data = aiohttp.FormData()
+            data.add_field("chat_id", TELEGRAM_CHAT_ID)
+            data.add_field("photo", photo_file, filename=os.path.basename(photo_path), content_type="image/jpeg")
+            data.add_field("caption", caption)
+            async with session.post(url, data=data) as resp:
+                if resp.status != 200:
+                    print("Ошибка отправки фото в Telegram:", await resp.text())
+                else:
+                    print("Фото с пожеланием отправлено успешно!")
 
 
 async def main():
@@ -152,11 +170,27 @@ async def main():
     # сохраняем в базу
     await save_wish_to_db(city, temp, description, daytime_phrase, wish)
 
-    # отправляем в Telegram
-    await send_to_telegram(wish)
+    # получаем рандомную картинку
+    photo_path = await get_random_image_path()
+
+    # отправляем фото + пожелание в одном сообщении
+    if photo_path:
+        await send_photo_and_caption_to_telegram(photo_path, wish)
+    else:
+        # если фото не нашли, отправим просто текст
+        await send_to_telegram(wish)
 
     # также печатаем в консоль (на всякий случай)
     print(wish)
+
+
+async def send_to_telegram(text: str):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload) as resp:
+            if resp.status != 200:
+                print("Ошибка отправки в Telegram:", await resp.text())
 
 
 if __name__ == "__main__":
